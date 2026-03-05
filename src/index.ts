@@ -5,10 +5,10 @@ import { OneCLI } from '@onecli-sh/sdk';
 
 import {
   ASSISTANT_NAME,
+  DATA_DIR,
   IDLE_TIMEOUT,
   ONECLI_URL,
   POLL_INTERVAL,
-  TIMEZONE,
   TRIGGER_PATTERN,
 } from './config.js';
 import './channels/index.js';
@@ -71,6 +71,16 @@ let messageLoopRunning = false;
 
 const channels: Channel[] = [];
 const queue = new GroupQueue();
+
+/**
+ * Transform host image paths to container paths.
+ * Host: data/images/abc.jpg -> Container: /workspace/images/abc.jpg
+ */
+function hostToContainerImagePath(hostPath: string): string {
+  const imagesDir = path.join(DATA_DIR, 'images');
+  const rel = path.relative(imagesDir, hostPath);
+  return `/workspace/images/${rel}`;
+}
 
 const onecli = new OneCLI({ url: ONECLI_URL });
 
@@ -203,7 +213,7 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
     if (!hasTrigger) return true;
   }
 
-  const prompt = formatMessages(missedMessages, TIMEZONE);
+  const prompt = formatMessages(missedMessages, hostToContainerImagePath);
 
   // Advance cursor so the piping path in startMessageLoop won't re-fetch
   // these messages. Save the old cursor so we can roll back on error.
@@ -441,7 +451,10 @@ async function startMessageLoop(): Promise<void> {
           );
           const messagesToSend =
             allPending.length > 0 ? allPending : groupMessages;
-          const formatted = formatMessages(messagesToSend, TIMEZONE);
+          const formatted = formatMessages(
+            messagesToSend,
+            hostToContainerImagePath,
+          );
 
           if (queue.sendMessage(chatJid, formatted)) {
             logger.debug(

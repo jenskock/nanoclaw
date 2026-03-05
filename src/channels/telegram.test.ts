@@ -295,29 +295,16 @@ describe('TelegramChannel', () => {
       expect(opts.onMessage).not.toHaveBeenCalled();
     });
 
-    it('skips bot commands (/chatid, /ping) but passes other / messages through', async () => {
+    it('skips command messages (starting with /)', async () => {
       const opts = createTestOpts();
       const channel = new TelegramChannel('test-token', opts);
       await channel.connect();
 
-      // Bot commands should be skipped
-      const ctx1 = createTextCtx({ text: '/chatid' });
-      await triggerTextMessage(ctx1);
+      const ctx = createTextCtx({ text: '/start' });
+      await triggerTextMessage(ctx);
+
       expect(opts.onMessage).not.toHaveBeenCalled();
       expect(opts.onChatMetadata).not.toHaveBeenCalled();
-
-      const ctx2 = createTextCtx({ text: '/ping' });
-      await triggerTextMessage(ctx2);
-      expect(opts.onMessage).not.toHaveBeenCalled();
-
-      // Non-bot /commands should flow through
-      const ctx3 = createTextCtx({ text: '/remote-control' });
-      await triggerTextMessage(ctx3);
-      expect(opts.onMessage).toHaveBeenCalledTimes(1);
-      expect(opts.onMessage).toHaveBeenCalledWith(
-        'tg:100200300',
-        expect.objectContaining({ content: '/remote-control' }),
-      );
     });
 
     it('extracts sender name from first_name', async () => {
@@ -723,7 +710,6 @@ describe('TelegramChannel', () => {
       expect(currentBot().api.sendMessage).toHaveBeenCalledWith(
         '100200300',
         'Hello',
-        { parse_mode: 'Markdown' },
       );
     });
 
@@ -737,7 +723,6 @@ describe('TelegramChannel', () => {
       expect(currentBot().api.sendMessage).toHaveBeenCalledWith(
         '-1001234567890',
         'Group message',
-        { parse_mode: 'Markdown' },
       );
     });
 
@@ -754,13 +739,11 @@ describe('TelegramChannel', () => {
         1,
         '100200300',
         'x'.repeat(4096),
-        { parse_mode: 'Markdown' },
       );
       expect(currentBot().api.sendMessage).toHaveBeenNthCalledWith(
         2,
         '100200300',
         'x'.repeat(904),
-        { parse_mode: 'Markdown' },
       );
     });
 

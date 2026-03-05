@@ -1,7 +1,10 @@
+import fs from 'fs';
 import https from 'https';
-import { Api, Bot } from 'grammy';
+import path from 'path';
 
-import { ASSISTANT_NAME, TRIGGER_PATTERN } from '../config.js';
+import { Bot } from 'grammy';
+
+import { ASSISTANT_NAME, DATA_DIR, TRIGGER_PATTERN } from '../config.js';
 import { readEnvFile } from '../env.js';
 import { logger } from '../logger.js';
 import { registerChannel, ChannelOpts } from './registry.js';
@@ -12,33 +15,76 @@ import {
   RegisteredGroup,
 } from '../types.js';
 
+const MAX_IMAGE_BYTES = 5 * 1024 * 1024; // 5MB safety guard
+
+function downloadFileWithLimit(
+  url: string,
+  destPath: string,
+  maxBytes: number,
+): Promise<void> {
+  return new Promise((resolve, reject) => {
+    https
+      .get(url, (res) => {
+        if (res.statusCode && res.statusCode >= 400) {
+          reject(new Error(`HTTP ${res.statusCode} when fetching ${url}`));
+          return;
+        }
+
+        const headerSize = res.headers['content-length']
+          ? Number(res.headers['content-length'])
+          : undefined;
+        if (headerSize && headerSize > maxBytes) {
+          res.resume();
+          reject(new Error(`File too large (${headerSize} bytes)`));
+          return;
+        }
+
+        fs.mkdirSync(path.dirname(destPath), { recursive: true });
+        const fileStream = fs.createWriteStream(destPath);
+        let bytes = 0;
+
+        res.on('data', (chunk) => {
+          bytes += chunk.length;
+          if (bytes > maxBytes) {
+            res.destroy();
+            fileStream.destroy();
+            fs.unlink(destPath, () => {
+              /* best effort */
+            });
+            reject(new Error(`File too large (>${maxBytes} bytes)`));
+          }
+        });
+
+        res.on('error', (err) => {
+          fileStream.destroy();
+          fs.unlink(destPath, () => {
+            /* best effort */
+          });
+          reject(err);
+        });
+
+        fileStream.on('error', (err) => {
+          res.destroy();
+          fs.unlink(destPath, () => {
+            /* best effort */
+          });
+          reject(err);
+        });
+
+        fileStream.on('finish', () => {
+          fileStream.close(() => resolve());
+        });
+
+        res.pipe(fileStream);
+      })
+      .on('error', reject);
+  });
+}
+
 export interface TelegramChannelOpts {
   onMessage: OnInboundMessage;
   onChatMetadata: OnChatMetadata;
   registeredGroups: () => Record<string, RegisteredGroup>;
-}
-
-/**
- * Send a message with Telegram Markdown parse mode, falling back to plain text.
- * Claude's output naturally matches Telegram's Markdown v1 format:
- *   *bold*, _italic_, `code`, ```code blocks```, [links](url)
- */
-async function sendTelegramMessage(
-  api: { sendMessage: Api['sendMessage'] },
-  chatId: string | number,
-  text: string,
-  options: { message_thread_id?: number } = {},
-): Promise<void> {
-  try {
-    await api.sendMessage(chatId, text, {
-      ...options,
-      parse_mode: 'Markdown',
-    });
-  } catch (err) {
-    // Fallback: send as plain text if Markdown parsing fails
-    logger.debug({ err }, 'Markdown send failed, falling back to plain text');
-    await api.sendMessage(chatId, text, options);
-  }
 }
 
 export class TelegramChannel implements Channel {
@@ -54,11 +100,7 @@ export class TelegramChannel implements Channel {
   }
 
   async connect(): Promise<void> {
-    this.bot = new Bot(this.botToken, {
-      client: {
-        baseFetchConfig: { agent: https.globalAgent, compress: true },
-      },
-    });
+    this.bot = new Bot(this.botToken);
 
     // Command to get chat ID (useful for registration)
     this.bot.command('chatid', (ctx) => {
@@ -80,15 +122,9 @@ export class TelegramChannel implements Channel {
       ctx.reply(`${ASSISTANT_NAME} is online.`);
     });
 
-    // Telegram bot commands handled above — skip them in the general handler
-    // so they don't also get stored as messages. All other /commands flow through.
-    const TELEGRAM_BOT_COMMANDS = new Set(['chatid', 'ping']);
-
     this.bot.on('message:text', async (ctx) => {
-      if (ctx.message.text.startsWith('/')) {
-        const cmd = ctx.message.text.slice(1).split(/[\s@]/)[0].toLowerCase();
-        if (TELEGRAM_BOT_COMMANDS.has(cmd)) return;
-      }
+      // Skip commands
+      if (ctx.message.text.startsWith('/')) return;
 
       const chatJid = `tg:${ctx.chat.id}`;
       let content = ctx.message.text;
@@ -128,15 +164,8 @@ export class TelegramChannel implements Channel {
       }
 
       // Store chat metadata for discovery
-      const isGroup =
-        ctx.chat.type === 'group' || ctx.chat.type === 'supergroup';
-      this.opts.onChatMetadata(
-        chatJid,
-        timestamp,
-        chatName,
-        'telegram',
-        isGroup,
-      );
+      const isGroup = ctx.chat.type === 'group' || ctx.chat.type === 'supergroup';
+      this.opts.onChatMetadata(chatJid, timestamp, chatName, 'telegram', isGroup);
 
       // Only deliver full message for registered groups
       const group = this.opts.registeredGroups()[chatJid];
@@ -179,15 +208,8 @@ export class TelegramChannel implements Channel {
         'Unknown';
       const caption = ctx.message.caption ? ` ${ctx.message.caption}` : '';
 
-      const isGroup =
-        ctx.chat.type === 'group' || ctx.chat.type === 'supergroup';
-      this.opts.onChatMetadata(
-        chatJid,
-        timestamp,
-        undefined,
-        'telegram',
-        isGroup,
-      );
+      const isGroup = ctx.chat.type === 'group' || ctx.chat.type === 'supergroup';
+      this.opts.onChatMetadata(chatJid, timestamp, undefined, 'telegram', isGroup);
       this.opts.onMessage(chatJid, {
         id: ctx.message.message_id.toString(),
         chat_jid: chatJid,
@@ -199,9 +221,79 @@ export class TelegramChannel implements Channel {
       });
     };
 
-    this.bot.on('message:photo', (ctx) => storeNonText(ctx, '[Photo]'));
+    this.bot.on('message:photo', async (ctx) => {
+      const chatJid = `tg:${ctx.chat.id}`;
+      const group = this.opts.registeredGroups()[chatJid];
+      if (!group) return;
+
+      const timestamp = new Date(ctx.message.date * 1000).toISOString();
+      const senderName =
+        ctx.from?.first_name ||
+        ctx.from?.username ||
+        ctx.from?.id?.toString() ||
+        'Unknown';
+      const caption = ctx.message.caption ? ` ${ctx.message.caption}` : '';
+      const isGroup =
+        ctx.chat.type === 'group' || ctx.chat.type === 'supergroup';
+
+      this.opts.onChatMetadata(
+        chatJid,
+        timestamp,
+        undefined,
+        'telegram',
+        isGroup,
+      );
+
+      let imagePath: string | undefined;
+      const photos = ctx.message.photo;
+      if (photos && photos.length > 0 && this.bot) {
+        const largest = photos[photos.length - 1];
+        try {
+          const file = await this.bot.api.getFile(largest.file_id);
+          if (file.file_path) {
+            const imagesRoot = path.join(
+              DATA_DIR,
+              'images',
+              `tg-${ctx.chat.id}`,
+            );
+            const ext = path.extname(file.file_path) || '.jpg';
+            const filename = `${largest.file_unique_id || ctx.message.message_id}${ext}`;
+            const destPath = path.join(imagesRoot, filename);
+            const url = `https://api.telegram.org/file/bot${this.botToken}/${file.file_path}`;
+
+            await downloadFileWithLimit(url, destPath, MAX_IMAGE_BYTES);
+            imagePath = destPath;
+            logger.info(
+              { chatJid, destPath },
+              'Telegram photo downloaded for image recognition',
+            );
+          }
+        } catch (err: any) {
+          logger.warn(
+            {
+              chatJid,
+              error: err?.message ?? String(err),
+            },
+            'Failed to download Telegram photo',
+          );
+        }
+      }
+
+      this.opts.onMessage(chatJid, {
+        id: ctx.message.message_id.toString(),
+        chat_jid: chatJid,
+        sender: ctx.from?.id?.toString() || '',
+        sender_name: senderName,
+        content: `[Photo]${caption}`,
+        timestamp,
+        is_from_me: false,
+        image_path: imagePath,
+      });
+    });
     this.bot.on('message:video', (ctx) => storeNonText(ctx, '[Video]'));
-    this.bot.on('message:voice', (ctx) => storeNonText(ctx, '[Voice message]'));
+    this.bot.on('message:voice', (ctx) =>
+      storeNonText(ctx, '[Voice message]'),
+    );
     this.bot.on('message:audio', (ctx) => storeNonText(ctx, '[Audio]'));
     this.bot.on('message:document', (ctx) => {
       const name = ctx.message.document?.file_name || 'file';
@@ -249,11 +341,10 @@ export class TelegramChannel implements Channel {
       // Telegram has a 4096 character limit per message — split if needed
       const MAX_LENGTH = 4096;
       if (text.length <= MAX_LENGTH) {
-        await sendTelegramMessage(this.bot.api, numericId, text);
+        await this.bot.api.sendMessage(numericId, text);
       } else {
         for (let i = 0; i < text.length; i += MAX_LENGTH) {
-          await sendTelegramMessage(
-            this.bot.api,
+          await this.bot.api.sendMessage(
             numericId,
             text.slice(i, i + MAX_LENGTH),
           );
