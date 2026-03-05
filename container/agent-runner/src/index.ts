@@ -53,9 +53,13 @@ interface SessionsIndex {
   entries: SessionEntry[];
 }
 
+type ContentBlock =
+  | { type: 'text'; text: string }
+  | { type: 'image'; source: { type: 'base64'; media_type: string; data: string } };
+
 interface SDKUserMessage {
   type: 'user';
-  message: { role: 'user'; content: string };
+  message: { role: 'user'; content: string | ContentBlock[] };
   parent_tool_use_id: null;
   session_id: string;
 }
@@ -73,10 +77,10 @@ class MessageStream {
   private waiting: (() => void) | null = null;
   private done = false;
 
-  push(text: string): void {
+  push(content: string | ContentBlock[]): void {
     this.queue.push({
       type: 'user',
-      message: { role: 'user', content: text },
+      message: { role: 'user', content },
       parent_tool_use_id: null,
       session_id: '',
     });
@@ -366,6 +370,49 @@ function waitForIpcMessage(): Promise<string | null> {
 }
 
 /**
+ * Parse XML message text and build multimodal content blocks.
+ * Extracts image="..." attributes from <message> tags, reads the files,
+ * and creates base64-encoded image content blocks for the Claude API.
+ */
+function buildContentBlocks(xmlText: string): string | ContentBlock[] {
+  const imageRegex = /image="([^"]+)"/g;
+  const matches = [...xmlText.matchAll(imageRegex)];
+
+  if (matches.length === 0) return xmlText;
+
+  const blocks: ContentBlock[] = [{ type: 'text', text: xmlText }];
+
+  for (const match of matches) {
+    const imagePath = match[1]
+      .replace(/&amp;/g, '&')
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>')
+      .replace(/&quot;/g, '"');
+
+    try {
+      if (fs.existsSync(imagePath)) {
+        const data = fs.readFileSync(imagePath);
+        blocks.push({
+          type: 'image',
+          source: {
+            type: 'base64',
+            media_type: 'image/jpeg',
+            data: data.toString('base64'),
+          },
+        });
+        log(`Added image content block: ${imagePath} (${data.length} bytes)`);
+      } else {
+        log(`Image file not found: ${imagePath}`);
+      }
+    } catch (err) {
+      log(`Failed to read image ${imagePath}: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+
+  return blocks;
+}
+
+/**
  * Run a single query and stream results via writeOutput.
  * Uses MessageStream (AsyncIterable) to keep isSingleUserTurn=false,
  * allowing agent teams subagents to run to completion.
@@ -384,7 +431,7 @@ async function runQuery(
   closedDuringQuery: boolean;
 }> {
   const stream = new MessageStream();
-  stream.push(prompt);
+  stream.push(buildContentBlocks(prompt));
 
   // Poll IPC for follow-up messages and _close sentinel during the query
   let ipcPolling = true;
@@ -401,7 +448,7 @@ async function runQuery(
     const messages = drainIpcInput();
     for (const text of messages) {
       log(`Piping IPC message into active query (${text.length} chars)`);
-      stream.push(text);
+      stream.push(buildContentBlocks(text));
     }
     setTimeout(pollIpcDuringQuery, IPC_POLL_MS);
   };

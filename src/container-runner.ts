@@ -144,6 +144,9 @@ function buildVolumeMounts(
     '.claude',
   );
   fs.mkdirSync(groupSessionsDir, { recursive: true });
+  // Container runs as node user (uid=1000, gid=1000) — ensure it can write
+  try { fs.chownSync(path.join(DATA_DIR, 'sessions', group.folder), 1000, 1000); } catch {}
+  try { fs.chownSync(groupSessionsDir, 1000, 1000); } catch {}
   const settingsFile = path.join(groupSessionsDir, 'settings.json');
   if (!fs.existsSync(settingsFile)) {
     fs.writeFileSync(
@@ -183,6 +186,15 @@ function buildVolumeMounts(
     hostPath: groupSessionsDir,
     containerPath: '/home/node/.claude',
     readonly: false,
+  });
+
+  // Shared images directory (read-only so agents can view but not delete images)
+  const imagesDir = path.join(DATA_DIR, 'images');
+  fs.mkdirSync(imagesDir, { recursive: true });
+  mounts.push({
+    hostPath: imagesDir,
+    containerPath: '/workspace/images',
+    readonly: true,
   });
 
   // Per-group IPC namespace: each group gets its own IPC directory
