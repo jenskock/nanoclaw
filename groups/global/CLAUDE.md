@@ -38,14 +38,46 @@ When working as a sub-agent or teammate, only use `send_message` if instructed t
 
 Files you create are saved in `/workspace/group/`. Use this for notes, research, or anything that should persist.
 
-## Memory
+## Long-Term Memory
 
-The `conversations/` folder contains searchable history of past conversations. Use this to recall context from previous sessions.
+You maintain a persistent memory file at `/workspace/group/memory.md`. This file survives context window resets — when the context is compacted, your memory is automatically restored into the new context window.
 
-When you learn something important:
-- Create files for structured data (e.g., `customers.md`, `preferences.md`)
-- Split files larger than 500 lines into folders
-- Keep an index in your memory for the files you create
+**Use ONLY `/workspace/group/memory.md` for all persistent memory.** Do NOT create ad-hoc files in `~/.claude/` or anywhere else to store user facts — always write to this single file.
+
+Update `memory.md` whenever you:
+- Learn something important about the user (name, preferences, habits, location, relationships, family)
+- Complete a significant task or project milestone
+- The user explicitly asks you to remember something
+- Discover context that will matter in future conversations
+
+**Format — use clear categories:**
+
+```
+## About the User
+- Name: ...
+- Location: ...
+
+## Family
+- Key people and relationships
+
+## Preferences
+- Communication style: ...
+
+## Ongoing Projects
+- Project name: brief status
+
+## Important Context
+- Key facts that affect how you should respond
+
+## Reminders
+- Things the user wants to be reminded of
+```
+
+At the start of each session, read `/workspace/group/memory.md`. When the user references something from the past that you don't recall, read it before saying you don't remember.
+
+Keep `memory.md` concise — under 300 lines. Archive older entries to `memory-archive.md` if it grows too large.
+
+The `conversations/` folder contains full archived transcripts of past conversations for deeper context when needed.
 
 ## Message Formatting
 

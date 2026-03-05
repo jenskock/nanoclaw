@@ -16,12 +16,7 @@
 
 import fs from 'fs';
 import path from 'path';
-import {
-  query,
-  HookCallback,
-  PreCompactHookInput,
-  PreToolUseHookInput,
-} from '@anthropic-ai/claude-agent-sdk';
+import { query, HookCallback, PreCompactHookInput, PreToolUseHookInput } from '@anthropic-ai/claude-agent-sdk';
 import { fileURLToPath } from 'url';
 
 interface ContainerInput {
@@ -32,6 +27,7 @@ interface ContainerInput {
   isMain: boolean;
   isScheduledTask?: boolean;
   assistantName?: string;
+  secrets?: Record<string, string>;
 }
 
 interface ContainerOutput {
@@ -234,33 +230,6 @@ function createSanitizeBashHook(): HookCallback {
   };
 }
 
-/**
- * Block Write/Edit calls to ad-hoc memory paths outside /workspace/group/.
- * The agent sometimes invents paths like ~/.claude/user-preferences/x.json.
- * This hook intercepts those and tells the agent to use memory.md instead.
- */
-function createMemoryGuardHook(): HookCallback {
-  return async (input, _toolUseId, _context) => {
-    const preInput = input as PreToolUseHookInput;
-    const filePath = ((preInput.tool_input as Record<string, unknown>).file_path as string) || '';
-
-    // Allow writes within the group workspace or system paths
-    if (!filePath || filePath.startsWith('/workspace/group/') || filePath.startsWith('/workspace/project/') || filePath.startsWith('/tmp/')) {
-      return {};
-    }
-
-    // Block writes to ~/.claude/ invented memory locations
-    if (filePath.startsWith('/home/node/.claude/') || filePath.startsWith('~/.claude/')) {
-      log(`Blocked write to ${filePath} — redirecting to memory.md`);
-      return {
-        continue: false,
-        reason: `Do not store user data in ${filePath}. Your ONLY memory store is /workspace/group/memory.md. Write the information there instead.`,
-      };
-    }
-
-    return {};
-  };
-}
 function sanitizeFilename(summary: string): string {
   return summary
     .toLowerCase()
@@ -545,14 +514,8 @@ async function runQuery(
         },
       },
       hooks: {
-        PreCompact: [
-          { hooks: [createPreCompactHook(containerInput.assistantName)] },
-        ],
-        PreToolUse: [
-          { matcher: 'Bash', hooks: [createSanitizeBashHook()] },
-          { matcher: 'Write', hooks: [createMemoryGuardHook()] },
-          { matcher: 'Edit', hooks: [createMemoryGuardHook()] },
-        ],
+        PreCompact: [{ hooks: [createPreCompactHook(containerInput.assistantName)] }],
+        PreToolUse: [{ matcher: 'Bash', hooks: [createSanitizeBashHook()] }],
       },
     }
   })) {
@@ -597,6 +560,7 @@ async function main(): Promise<void> {
   try {
     const stdinData = await readStdin();
     containerInput = JSON.parse(stdinData);
+    // Delete the temp file the entrypoint wrote — it contains secrets
     try { fs.unlinkSync('/tmp/input.json'); } catch { /* may not exist */ }
     log(`Received input for group: ${containerInput.groupFolder}`);
   } catch (err) {
@@ -608,9 +572,12 @@ async function main(): Promise<void> {
     process.exit(1);
   }
 
-  // Credentials are injected by the host's credential proxy via ANTHROPIC_BASE_URL.
-  // No real secrets exist in the container environment.
+  // Build SDK env: merge secrets into process.env for the SDK only.
+  // Secrets never touch process.env itself, so Bash subprocesses can't see them.
   const sdkEnv: Record<string, string | undefined> = { ...process.env };
+  for (const [key, value] of Object.entries(containerInput.secrets || {})) {
+    sdkEnv[key] = value;
+  }
 
   const __dirname = path.dirname(fileURLToPath(import.meta.url));
   const mcpServerPath = path.join(__dirname, 'ipc-mcp-stdio.js');
