@@ -7,7 +7,16 @@
       "Bash(npm run:*)",
       "Bash(npx vitest:*)",
       "Bash(git:*)",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "Bash(./container/build.sh:*)",
+      "Bash(npm ls @anthropic-ai/claude-agent-sdk)",
+      "Bash(npx -y tsx -e \"import\\(''@anthropic-ai/claude-agent-sdk''\\).then\\(m => console.log\\(Object.keys\\(m\\)\\)\\)\")",
+      "Bash(sed:*)",
+      "Bash(systemctl:*)",
+      "Bash(grep:*)",
+      "Bash(sqlite3:*)",
+      "Bash(ls:*)",
+      "Bash(python3:*)"
     ]
   }
 }

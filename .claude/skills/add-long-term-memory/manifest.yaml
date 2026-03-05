@@ -1,0 +1,13 @@
+skill: add-long-term-memory
+version: 1.0.0
+description: "Persistent long-term memory for agents across context window resets"
+core_version: 0.1.0
+adds: []
+modifies:
+  - container/agent-runner/src/index.ts
+structured:
+  npm_dependencies: {}
+  env_additions: []
+conflicts: []
+depends: []
+test: "npm run build"
