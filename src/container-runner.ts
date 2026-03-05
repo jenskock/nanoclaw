@@ -124,8 +124,12 @@ function buildVolumeMounts(
   );
   fs.mkdirSync(groupSessionsDir, { recursive: true });
   // Container runs as node user (uid=1000, gid=1000) — ensure it can write
-  try { fs.chownSync(path.join(DATA_DIR, 'sessions', group.folder), 1000, 1000); } catch {}
-  try { fs.chownSync(groupSessionsDir, 1000, 1000); } catch {}
+  try {
+    fs.chownSync(path.join(DATA_DIR, 'sessions', group.folder), 1000, 1000);
+  } catch {}
+  try {
+    fs.chownSync(groupSessionsDir, 1000, 1000);
+  } catch {}
   const settingsFile = path.join(groupSessionsDir, 'settings.json');
   if (!fs.existsSync(settingsFile)) {
     fs.writeFileSync(
