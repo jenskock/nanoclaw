@@ -1,0 +1,13 @@
+skill: exchange-web-services
+version: 1.0.0
+description: "Microsoft Exchange (EWS) integration — read inbox and calendar for daily briefings and debriefings"
+core_version: 0.1.0
+adds: []
+modifies:
+  - src/container-runner.ts
+  - container/Dockerfile
+  - groups/global/CLAUDE.md
+structured:
+  npm_dependencies: {}
+conflicts: []
+depends: []

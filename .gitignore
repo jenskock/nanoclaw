@@ -38,4 +38,15 @@ groups/global/*
 agents-sdk-docs
 
 # Logs
-.log
+*.log
+*.log.*
+
+# Private keys & certificates
+*.pem
+*.key
+*.p12
+*.pfx
+*.crt
+
+# Claude Settings
+.claude/settings.local.json
