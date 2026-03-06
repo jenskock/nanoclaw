@@ -17,6 +17,7 @@ import {
   ONECLI_URL,
   TIMEZONE,
 } from './config.js';
+import { readEnvFile } from './env.js';
 import { resolveGroupFolderPath, resolveGroupIpcPath } from './group-folder.js';
 import { logger } from './logger.js';
 import {
@@ -259,6 +260,22 @@ function buildVolumeMounts(
   return mounts;
 }
 
+/**
+ * Read allowed secrets from .env for passing to the container via stdin.
+ * Secrets are never written to disk or mounted as files.
+ */
+function readSecrets(): Record<string, string> {
+  return readEnvFile([
+    'CLAUDE_CODE_OAUTH_TOKEN',
+    'ANTHROPIC_API_KEY',
+    'ANTHROPIC_BASE_URL',
+    'ANTHROPIC_AUTH_TOKEN',
+    'EWS_URL',
+    'EWS_USERNAME',
+    'EWS_PASSWORD',
+  ]);
+}
+
 async function buildContainerArgs(
   mounts: VolumeMount[],
   containerName: string,
@@ -372,7 +389,7 @@ export async function runContainerAgent(
     let stdoutTruncated = false;
     let stderrTruncated = false;
 
-    container.stdin.write(JSON.stringify(input));
+    container.stdin.write(JSON.stringify({ ...input, secrets: readSecrets() }));
     container.stdin.end();
 
     // Streaming output: parse OUTPUT_START/END marker pairs as they arrive

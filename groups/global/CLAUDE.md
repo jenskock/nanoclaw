@@ -79,6 +79,57 @@ Keep `memory.md` concise — under 300 lines. Archive older entries to `memory-a
 
 The `conversations/` folder contains full archived transcripts of past conversations for deeper context when needed.
 
+## Exchange Email & Calendar
+
+You have access to Exchange Web Services (EWS) tools via bash scripts. The credentials are available as environment variables: `$EWS_URL`, `$EWS_USERNAME`, `$EWS_PASSWORD`.
+
+### Read inbox (summary, last 20 emails)
+
+```bash
+EWS_URL="$EWS_URL" USERNAME="$EWS_USERNAME" PASSWORD="$EWS_PASSWORD" \
+  bash /workspace/project/scripts/exchange/get_inbox.sh
+```
+
+### Read inbox with full email body (last 10 emails, two-step fetch)
+
+```bash
+EWS_URL="$EWS_URL" USERNAME="$EWS_USERNAME" PASSWORD="$EWS_PASSWORD" \
+  bash /workspace/project/scripts/exchange/get_inbox_full.sh
+```
+
+### Read calendar for a specific day
+
+```bash
+EWS_URL="$EWS_URL" USERNAME="$EWS_USERNAME" PASSWORD="$EWS_PASSWORD" \
+  bash /workspace/project/scripts/exchange/get_calendar_day.sh YYYY-MM-DD
+```
+
+### Morning Briefing
+
+When asked for a morning briefing (or on a scheduled morning task), run both the inbox and calendar scripts for today, then deliver a concise summary:
+
+- *Inbox*: number of unread emails, top senders, subject lines of the most important emails
+- *Calendar*: today's meetings in chronological order with time, title, and location/link
+
+Keep it brief. Use bullet points. No markdown — WhatsApp/Telegram formatting only.
+
+### Evening Debriefing
+
+When asked for an evening debriefing (or on a scheduled evening task), check today's calendar (which meetings happened) and any inbox activity since morning, then deliver:
+
+- Meetings that took place today
+- Important emails that arrived during the day
+- Any follow-ups or action items the user should know about
+
+### Parsing the XML responses
+
+The scripts return raw EWS XML. Extract the relevant fields using `grep` and `sed`, or use `xmllint --xpath` if available. Key fields to extract:
+
+- Emails: `Subject`, `From/Name`, `DateTimeReceived`, `IsRead`, `Body`
+- Calendar: `Subject`, `Start`, `End`, `Location`, `IsAllDayEvent`, `Organizer/Name`
+
+If the XML is large, focus on the most recent or most important items rather than parsing everything.
+
 ## Message Formatting
 
 Format messages based on the channel you're responding to. Check your group folder name:

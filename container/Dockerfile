@@ -22,6 +22,7 @@ RUN apt-get update && apt-get install -y \
     libcups2 \
     libdrm2 \
     libxshmfence1 \
+    libxml2-utils \
     curl \
     git \
     && rm -rf /var/lib/apt/lists/*
