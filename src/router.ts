@@ -18,7 +18,10 @@ export function formatMessages(
     const imageAttr = m.image_path
       ? ` image="${escapeXml(imagePathTransformer ? imagePathTransformer(m.image_path) : m.image_path)}"`
       : '';
-    const displayTime = formatLocalTime(m.timestamp, Intl.DateTimeFormat().resolvedOptions().timeZone);
+    const displayTime = formatLocalTime(
+      m.timestamp,
+      Intl.DateTimeFormat().resolvedOptions().timeZone,
+    );
     return `<message sender="${escapeXml(m.sender_name)}" time="${escapeXml(displayTime)}"${imageAttr}>${escapeXml(m.content)}</message>`;
   });
   return `<messages>\n${lines.join('\n')}\n</messages>`;

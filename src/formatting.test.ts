@@ -92,9 +92,9 @@ describe('formatMessages', () => {
   });
 
   it('escapes special characters in content', () => {
-    const result = formatMessages(
-      [makeMsg({ content: '<script>alert("xss")</script>' })],
-    );
+    const result = formatMessages([
+      makeMsg({ content: '<script>alert("xss")</script>' }),
+    ]);
     expect(result).toContain(
       '&lt;script&gt;alert(&quot;xss&quot;)&lt;/script&gt;',
     );
