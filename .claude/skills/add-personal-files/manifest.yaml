@@ -1,0 +1,15 @@
+skill: add-personal-files
+version: 1.0.0
+description: "Mount a user-defined personal files directory for agent read/write and Q&A"
+core_version: 0.1.0
+adds: []
+modifies:
+  - src/config.ts
+  - src/container-runner.ts
+structured:
+  npm_dependencies: {}
+  env_additions:
+    - PERSONAL_FILES_DIR
+conflicts: []
+depends: []
+test: "npm run build"

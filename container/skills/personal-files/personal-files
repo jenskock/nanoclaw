@@ -1,0 +1,43 @@
+#!/usr/bin/env sh
+# List or search the user's personal files tree at /workspace/personal-files.
+# Usage: personal-files list [subdir]
+#        personal-files search <pattern> [subdir]
+
+ROOT="/workspace/personal-files"
+
+if [ ! -d "$ROOT" ]; then
+  echo "Personal files directory not mounted at $ROOT. Set PERSONAL_FILES_DIR and restart."
+  exit 1
+fi
+
+cmd="${1:-list}"
+shift || true
+
+case "$cmd" in
+  list)
+    subdir="${1:-.}"
+    dir="$ROOT/$subdir"
+    [ -d "$dir" ] || dir="$ROOT"
+    echo "=== $dir ==="
+    ls -la "$dir" 2>/dev/null || find "$dir" -maxdepth 1 -print 2>/dev/null | sort
+    ;;
+  search)
+    if [ -z "$1" ]; then
+      echo "Usage: personal-files search <pattern> [subdir]"
+      exit 1
+    fi
+    pattern="$1"
+    subdir="${2:-.}"
+    dir="$ROOT/$subdir"
+    [ -d "$dir" ] || dir="$ROOT"
+    echo "=== Files matching \"$pattern\" under $dir ==="
+    find "$dir" -type f \( -name '*.md' -o -name '*.txt' -o -name '*.rst' -o -name '*.py' -o -name '*.js' -o -name '*.ts' -o -name '*.json' -o -name '*.yaml' -o -name '*.yml' -o -name '*.html' -o -name '*.htm' \) 2>/dev/null | while read -r f; do
+      grep -l "$pattern" "$f" 2>/dev/null
+    done | head -100
+    ;;
+  *)
+    echo "Usage: personal-files list [subdir]"
+    echo "       personal-files search <pattern> [subdir]"
+    exit 1
+    ;;
+esac
