@@ -14,6 +14,8 @@ const envConfig = readEnvFile([
   'ONECLI_API_KEY',
   'TZ',
   'PERSONAL_FILES_DIR',
+  'WHISPER_BIN',
+  'WHISPER_MODEL',
 ]);
 
 export const ASSISTANT_NAME =
@@ -25,6 +27,13 @@ export const ASSISTANT_HAS_OWN_NUMBER =
 // Optional: host path to user's personal files directory (mounted at /workspace/personal-files in containers)
 export const PERSONAL_FILES_DIR =
   process.env.PERSONAL_FILES_DIR || envConfig.PERSONAL_FILES_DIR || '';
+
+export const WHISPER_BIN =
+  process.env.WHISPER_BIN || envConfig.WHISPER_BIN || 'whisper-cli';
+export const WHISPER_MODEL =
+  process.env.WHISPER_MODEL ||
+  envConfig.WHISPER_MODEL ||
+  'data/models/ggml-base.bin';
 
 export const POLL_INTERVAL = 2000;
 export const SCHEDULER_POLL_INTERVAL = 60000;
