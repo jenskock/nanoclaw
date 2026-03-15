@@ -32,6 +32,7 @@ interface ContainerInput {
   isMain: boolean;
   isScheduledTask?: boolean;
   assistantName?: string;
+  secrets?: Record<string, string>;
 }
 
 interface ContainerOutput {
@@ -609,8 +610,11 @@ async function main(): Promise<void> {
   }
 
   // Credentials are injected by the host's credential proxy via ANTHROPIC_BASE_URL.
-  // No real secrets exist in the container environment.
-  const sdkEnv: Record<string, string | undefined> = { ...process.env };
+  // Additional secrets (e.g. EWS_URL, EWS_USERNAME, EWS_PASSWORD) are passed via stdin.
+  const sdkEnv: Record<string, string | undefined> = {
+    ...process.env,
+    ...containerInput.secrets,
+  };
 
   const __dirname = path.dirname(fileURLToPath(import.meta.url));
   const mcpServerPath = path.join(__dirname, 'ipc-mcp-stdio.js');
