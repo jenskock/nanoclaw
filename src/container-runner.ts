@@ -46,6 +46,7 @@ export interface ContainerInput {
   isScheduledTask?: boolean;
   assistantName?: string;
   script?: string;
+  secrets?: Record<string, string>;
 }
 
 export interface ContainerOutput {
