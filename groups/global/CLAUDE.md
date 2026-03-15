@@ -79,6 +79,22 @@ Keep `memory.md` concise — under 300 lines. Archive older entries to `memory-a
 
 The `conversations/` folder contains full archived transcripts of past conversations for deeper context when needed.
 
+## Personal Files
+
+You have access to the user's personal files at `/workspace/personal-files`. This directory can contain anything: projects, notes, PDFs, presentations, spreadsheets, etc.
+
+**Scope:** Only paths under `/workspace/personal-files` are the user's personal files. Do not read or write outside this tree for "personal files" requests.
+
+**Reading and searching:** When the user asks about "my files", "my notes", "in my personal folder", or similar, use `/workspace/personal-files` as the root. You may:
+- List and navigate folders (e.g. `ls`, `find`).
+- Read and summarize text-based files (markdown, code, CSV, etc.).
+- For PDFs or other binary formats, use `pdftotext` if available.
+- Search for content (e.g. `grep`, `rg`).
+
+You can also use the `personal-files` command: `personal-files list [subdir]`, `personal-files search "query"`.
+
+**Writing:** Create, edit, or delete files or folders under `/workspace/personal-files` **only when the user explicitly asks**. Do not modify personal files on your own initiative.
+
 ## Exchange Email & Calendar
 
 You have access to Exchange Web Services (EWS) tools via bash scripts. The credentials are available as environment variables: `$EWS_URL`, `$EWS_USERNAME`, `$EWS_PASSWORD`.
