@@ -62,14 +62,10 @@ describe('escapeXml', () => {
 // --- formatMessages ---
 
 describe('formatMessages', () => {
-  const TZ = 'UTC';
-
-  it('formats a single message as XML with context header', () => {
-    const result = formatMessages([makeMsg()], TZ);
-    expect(result).toContain('<context timezone="UTC" />');
+  it('formats a single message as XML', () => {
+    const result = formatMessages([makeMsg()]);
     expect(result).toContain('<message sender="Alice"');
     expect(result).toContain('>hello</message>');
-    expect(result).toContain('Jan 1, 2024');
   });
 
   it('formats multiple messages', () => {
@@ -87,7 +83,7 @@ describe('formatMessages', () => {
         timestamp: '2024-01-01T01:00:00.000Z',
       }),
     ];
-    const result = formatMessages(msgs, TZ);
+    const result = formatMessages(msgs);
     expect(result).toContain('sender="Alice"');
     expect(result).toContain('sender="Bob"');
     expect(result).toContain('>hi</message>');
@@ -95,14 +91,13 @@ describe('formatMessages', () => {
   });
 
   it('escapes special characters in sender names', () => {
-    const result = formatMessages([makeMsg({ sender_name: 'A & B <Co>' })], TZ);
+    const result = formatMessages([makeMsg({ sender_name: 'A & B <Co>' })]);
     expect(result).toContain('sender="A &amp; B &lt;Co&gt;"');
   });
 
   it('escapes special characters in content', () => {
     const result = formatMessages(
       [makeMsg({ content: '<script>alert("xss")</script>' })],
-      TZ,
     );
     expect(result).toContain(
       '&lt;script&gt;alert(&quot;xss&quot;)&lt;/script&gt;',
@@ -110,23 +105,20 @@ describe('formatMessages', () => {
   });
 
   it('handles empty array', () => {
-    const result = formatMessages([], TZ);
-    expect(result).toContain('<context timezone="UTC" />');
-    expect(result).toContain('<messages>\n\n</messages>');
+    const result = formatMessages([]);
+    expect(result).toContain('<messages>');
+    expect(result).toContain('</messages>');
   });
 
   it('renders reply context as quoted_message element', () => {
-    const result = formatMessages(
-      [
-        makeMsg({
-          content: 'Yes, on my way!',
-          reply_to_message_id: '42',
-          reply_to_message_content: 'Are you coming tonight?',
-          reply_to_sender_name: 'Bob',
-        }),
-      ],
-      TZ,
-    );
+    const result = formatMessages([
+      makeMsg({
+        content: 'Yes, on my way!',
+        reply_to_message_id: '42',
+        reply_to_message_content: 'Are you coming tonight?',
+        reply_to_sender_name: 'Bob',
+      }),
+    ]);
     expect(result).toContain('reply_to="42"');
     expect(result).toContain(
       '<quoted_message from="Bob">Are you coming tonight?</quoted_message>',
@@ -135,51 +127,40 @@ describe('formatMessages', () => {
   });
 
   it('omits reply attributes when no reply context', () => {
-    const result = formatMessages([makeMsg()], TZ);
+    const result = formatMessages([makeMsg()]);
     expect(result).not.toContain('reply_to');
     expect(result).not.toContain('quoted_message');
   });
 
   it('omits quoted_message when content is missing but id is present', () => {
-    const result = formatMessages(
-      [
-        makeMsg({
-          reply_to_message_id: '42',
-          reply_to_sender_name: 'Bob',
-        }),
-      ],
-      TZ,
-    );
+    const result = formatMessages([
+      makeMsg({
+        reply_to_message_id: '42',
+        reply_to_sender_name: 'Bob',
+      }),
+    ]);
     expect(result).toContain('reply_to="42"');
     expect(result).not.toContain('quoted_message');
   });
 
   it('escapes special characters in reply context', () => {
-    const result = formatMessages(
-      [
-        makeMsg({
-          reply_to_message_id: '1',
-          reply_to_message_content: '<script>alert("xss")</script>',
-          reply_to_sender_name: 'A & B',
-        }),
-      ],
-      TZ,
-    );
+    const result = formatMessages([
+      makeMsg({
+        reply_to_message_id: '1',
+        reply_to_message_content: '<script>alert("xss")</script>',
+        reply_to_sender_name: 'A & B',
+      }),
+    ]);
     expect(result).toContain('from="A &amp; B"');
     expect(result).toContain(
       '&lt;script&gt;alert(&quot;xss&quot;)&lt;/script&gt;',
     );
   });
 
-  it('converts timestamps to local time for given timezone', () => {
-    // 2024-01-01T18:30:00Z in America/New_York (EST) = 1:30 PM
-    const result = formatMessages(
-      [makeMsg({ timestamp: '2024-01-01T18:30:00.000Z' })],
-      'America/New_York',
-    );
-    expect(result).toContain('1:30');
-    expect(result).toContain('PM');
-    expect(result).toContain('<context timezone="America/New_York" />');
+  it('transforms image paths when transformer is provided', () => {
+    const msg = makeMsg({ image_path: '/host/path/img.jpg' } as any);
+    const result = formatMessages([msg], (p) => `/container${p}`);
+    expect(result).toContain('image="/container/host/path/img.jpg"');
   });
 });
 
