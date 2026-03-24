@@ -16,6 +16,7 @@ vi.mock('./config.js', () => ({
   IDLE_TIMEOUT: 1800000, // 30min
   ONECLI_API_KEY: '',
   ONECLI_URL: 'http://localhost:10254',
+  PERSONAL_FILES_DIR: '',
   TIMEZONE: 'America/Los_Angeles',
 }));
 

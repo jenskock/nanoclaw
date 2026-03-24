@@ -349,7 +349,7 @@ export function getNewMessages(
   const placeholders = jids.map(() => '?').join(',');
   // Filter bot messages using both the is_bot_message flag AND the content
   // prefix as a backstop for messages written before the migration ran.
-  // Limit results to the most recent messages to keep prompt sizes bounded.
+  // Subquery takes the N most recent, outer query re-sorts chronologically.
   const sql = `
     SELECT * FROM (
       SELECT id, chat_jid, sender, sender_name, content, timestamp, is_from_me,
@@ -383,6 +383,7 @@ export function getMessagesSince(
 ): NewMessage[] {
   // Filter bot messages using both the is_bot_message flag AND the content
   // prefix as a backstop for messages written before the migration ran.
+  // Subquery takes the N most recent, outer query re-sorts chronologically.
   const sql = `
     SELECT * FROM (
       SELECT id, chat_jid, sender, sender_name, content, timestamp, is_from_me,
