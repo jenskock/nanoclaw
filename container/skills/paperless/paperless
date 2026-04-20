@@ -1,0 +1,100 @@
+#!/usr/bin/env sh
+# Query Paperless-ngx documents via the REST API.
+# Usage: paperless search <query>
+#        paperless get <id>
+#        paperless list [page]
+#        paperless tags
+#        paperless correspondents
+
+if [ -z "$PAPERLESS_URL" ] || [ -z "$PAPERLESS_TOKEN" ]; then
+  echo "PAPERLESS_URL and PAPERLESS_TOKEN are not set. Check your .env and container secrets."
+  exit 1
+fi
+
+BASE="${PAPERLESS_URL%/}"
+AUTH="Authorization: Token $PAPERLESS_TOKEN"
+
+cmd="${1:-list}"
+shift || true
+
+case "$cmd" in
+  search)
+    query="$1"
+    if [ -z "$query" ]; then
+      echo "Usage: paperless search <query>"
+      exit 1
+    fi
+    encoded=$(printf '%s' "$query" | python3 -c "import sys,urllib.parse; print(urllib.parse.quote(sys.stdin.read()))")
+    curl -sf -H "$AUTH" "$BASE/api/documents/?query=$encoded&page_size=10" | python3 -c "
+import sys, json
+data = json.load(sys.stdin)
+docs = data.get('results', [])
+print(f'Found {data.get(\"count\", 0)} document(s) (showing {len(docs)}):')
+for d in docs:
+    tags = ', '.join(str(t) for t in d.get('tags', []))
+    print(f'  [{d[\"id\"]}] {d[\"title\"]}  created={d.get(\"created\",\"?\")}  tags=[{tags}]')
+"
+    ;;
+
+  get)
+    id="$1"
+    if [ -z "$id" ]; then
+      echo "Usage: paperless get <id>"
+      exit 1
+    fi
+    curl -sf -H "$AUTH" "$BASE/api/documents/$id/" | python3 -c "
+import sys, json
+d = json.load(sys.stdin)
+print(f'ID:            {d[\"id\"]}')
+print(f'Title:         {d[\"title\"]}')
+print(f'Created:       {d.get(\"created\",\"?\")}')
+print(f'Added:         {d.get(\"added\",\"?\")}')
+print(f'Correspondent: {d.get(\"correspondent\")}')
+print(f'Tags:          {d.get(\"tags\",[])}')
+print(f'Doc type:      {d.get(\"document_type\")}')
+print()
+print('--- Content ---')
+print(d.get('content') or '(no extracted text)')
+"
+    ;;
+
+  list)
+    page="${1:-1}"
+    curl -sf -H "$AUTH" "$BASE/api/documents/?page=$page&page_size=20&ordering=-created" | python3 -c "
+import sys, json
+data = json.load(sys.stdin)
+docs = data.get('results', [])
+print(f'Total: {data.get(\"count\", 0)} document(s) (page $page, showing {len(docs)}):')
+for d in docs:
+    print(f'  [{d[\"id\"]}] {d[\"title\"]}  {d.get(\"created\",\"?\")}')
+"
+    ;;
+
+  tags)
+    curl -sf -H "$AUTH" "$BASE/api/tags/?page_size=100" | python3 -c "
+import sys, json
+data = json.load(sys.stdin)
+for t in data.get('results', []):
+    print(f'  [{t[\"id\"]}] {t[\"name\"]}  (docs: {t.get(\"document_count\", 0)})')
+"
+    ;;
+
+  correspondents)
+    curl -sf -H "$AUTH" "$BASE/api/correspondents/?page_size=100" | python3 -c "
+import sys, json
+data = json.load(sys.stdin)
+for c in data.get('results', []):
+    print(f'  [{c[\"id\"]}] {c[\"name\"]}  (docs: {c.get(\"document_count\", 0)})')
+"
+    ;;
+
+  *)
+    echo "Commands:"
+    echo "  paperless search <query>       Full-text search across all documents"
+    echo "  paperless get <id>             Fetch document metadata and extracted text"
+    echo "  paperless list [page]          List documents newest-first (20 per page)"
+    echo "  paperless tags                 List all tags with document counts"
+    echo "  paperless correspondents       List all correspondents with document counts"
+    exit 1
+    ;;
+esac

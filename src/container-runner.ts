@@ -289,6 +289,8 @@ function readSecrets(): Record<string, string> {
     'EWS_URL',
     'EWS_USERNAME',
     'EWS_PASSWORD',
+    'PAPERLESS_URL',
+    'PAPERLESS_TOKEN',
   ]);
 }
 
